@@ -556,6 +556,7 @@
       <button class="acct-item" id="acctSwitch">🔄 切換使用者</button>
       <button class="acct-item" id="acctRename">✏️ 重新命名</button>
       <button class="acct-item" id="acctPin">🔒 設定 / 變更密碼</button>
+      <button class="acct-item" id="acctClearRecs">🧹 清除所有消費記錄(保留卡片)</button>
       <button class="acct-item danger" id="acctDelete">🗑️ 刪除此帳號與所有資料</button>
     </div>
   </div>
@@ -1272,6 +1273,15 @@ function setPin(){
   users.find(u=>u.id===currentUser.id).pin=pin?hashPin(pin):''; currentUser.pin=pin?hashPin(pin):'';
   setUsers(users);document.getElementById('acctCur').innerHTML=acctCurHtml();toast(pin?'密碼已設定':'已移除密碼');
 }
+function clearAllRecords(){
+  if(!records||!records.length){toast('目前沒有消費記錄');return;}
+  if(!confirm('確定清除「'+currentUser.name+'」的全部 '+records.length+' 筆消費記錄?卡片會保留,此動作無法復原。'))return;
+  records=[];
+  renderAll();
+  schedulePush();
+  closeAcct();
+  toast('已清除所有消費記錄');
+}
 function deleteAccount(){
   if(!confirm('確定刪除「'+currentUser.name+'」及其所有記帳資料?此動作無法復原。'))return;
   ['cards','records','seen'].forEach(s=>localStorage.removeItem(uk(s)));
@@ -1298,6 +1308,7 @@ function bindAuth(){
   document.getElementById('acctSwitch').onclick=()=>{if(CLOUD())logoutCloud();else{closeAcct();showAuth();}};
   document.getElementById('acctRename').onclick=renameUser;
   document.getElementById('acctPin').onclick=()=>{if(CLOUD())cloudSetPass();else setPin();};
+  document.getElementById('acctClearRecs').onclick=clearAllRecords;
   document.getElementById('acctDelete').onclick=deleteAccount;
   /* cloud login form */
   document.getElementById('clLogin').onclick=cloudSubmit;
