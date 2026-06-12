@@ -577,6 +577,10 @@ const SCRIPT_URL='https://script.google.com/macros/s/AKfycbziH8hzH4_w9GAeqvt6sGm
 const CLOUD=()=>/^https:\/\/script\.google\.com\/.+\/exec\b/.test(SCRIPT_URL);
 const CLOUD_SESSION='ccr_cloud_session';
 
+/* 新使用者預設資料:'cards' = 只給範例卡片、消費記錄清零(預設);
+   'none' = 完全空白(連範例卡片都不給);'full' = 範例卡片 + 範例消費記錄(原本的展示用) */
+const SEED_MODE='cards';
+
 const THEMES={
   jade:['#1f7a5c','#11503c'], ocean:['#236f86','#0c3142'],
   plum:['#5b2a4e','#2c1226'], copper:['#9a5a2c','#5a2f16'],
@@ -644,23 +648,26 @@ function avatarGrad(name){const [a,b]=THEMES[avatarTheme(name)];return `linear-g
 /* ---------- seed sample data ---------- */
 function seed(){
   if(localStorage.getItem(uk('seen'))) return;
-  cards=[
+  cards = (SEED_MODE==='none') ? [] : [
     {id:uid(),name:'現金回饋卡',theme:'jade',defaultRate:1,cap:0,rates:{網購:3,行動支付:3,'超市量販':2}},
     {id:uid(),name:'旅遊聯名卡',theme:'ocean',defaultRate:1.2,cap:0,rates:{'旅遊住宿':5,交通:3,餐飲:2}},
     {id:uid(),name:'餐飲娛樂神卡',theme:'berry',defaultRate:0.5,cap:500,rates:{餐飲:5,'娛樂訂閱':5,'百貨服飾':2}},
   ];
-  const ym=monthOf(todayStr());
-  const mk=(day,cardIdx,cat,amt,note)=>{
-    const c=cards[cardIdx]; const r=rateOf(c,cat);
-    return {id:uid(),date:ym+'-'+String(day).padStart(2,'0'),cardId:c.id,cat,amount:amt,rate:r,cashback:Math.round(amt*r/100),note:note||''};
-  };
-  records=[
-    mk(2,2,'餐飲',880,'聚餐'), mk(4,0,'網購',2400,'家電'),
-    mk(6,1,'旅遊住宿',6200,'訂房'), mk(8,0,'行動支付',350,'超商'),
-    mk(11,2,'娛樂訂閱',390,'串流'), mk(13,1,'交通',1200,'高鐵'),
-    mk(15,0,'超市量販',1650,'採買'), mk(18,2,'餐飲',1280,'慶生'),
-    mk(21,1,'餐飲',640,'午餐'), mk(24,0,'一般消費',2900,''),
-  ];
+  records=[];
+  if(SEED_MODE==='full'){
+    const ym=monthOf(todayStr());
+    const mk=(day,cardIdx,cat,amt,note)=>{
+      const c=cards[cardIdx]; const r=rateOf(c,cat);
+      return {id:uid(),date:ym+'-'+String(day).padStart(2,'0'),cardId:c.id,cat,amount:amt,rate:r,cashback:Math.round(amt*r/100),note:note||''};
+    };
+    records=[
+      mk(2,2,'餐飲',880,'聚餐'), mk(4,0,'網購',2400,'家電'),
+      mk(6,1,'旅遊住宿',6200,'訂房'), mk(8,0,'行動支付',350,'超商'),
+      mk(11,2,'娛樂訂閱',390,'串流'), mk(13,1,'交通',1200,'高鐵'),
+      mk(15,0,'超市量販',1650,'採買'), mk(18,2,'餐飲',1280,'慶生'),
+      mk(21,1,'餐飲',640,'午餐'), mk(24,0,'一般消費',2900,''),
+    ];
+  }
   saveCards();saveRecs();
   localStorage.setItem(uk('seen'),'1');
 }
