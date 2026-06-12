@@ -592,6 +592,7 @@ const THEMES={
 const THEME_KEYS=Object.keys(THEMES);
 
 const CATEGORIES=[
+  ['日本','🇯🇵'],['韓國','🇰🇷'],['其他海外','🌐'],
   ['餐飲','🍜'],['網購','🛒'],['行動支付','📱'],['超市量販','🧺'],
   ['加油','⛽'],['交通','🚆'],['旅遊住宿','✈️'],['百貨服飾','🛍️'],
   ['娛樂訂閱','🎬'],['醫療','💊'],['一般消費','💳'],['其他','📦'],
@@ -602,7 +603,7 @@ const CAT_ICON=Object.fromEntries(CATEGORIES);
 let cards=[], records=[];
 let currentUser=null;
 let currentMonth='ALL';
-let rankCat='餐飲';
+let rankCat='日本';
 let editingCardId=null;
 let modalTheme='jade';
 let chartCard=null, chartCat=null;
@@ -650,9 +651,11 @@ function avatarGrad(name){const [a,b]=THEMES[avatarTheme(name)];return `linear-g
 function seed(){
   if(localStorage.getItem(uk('seen'))) return;
   cards = (SEED_MODE==='none') ? [] : [
-    {id:uid(),name:'現金回饋卡',theme:'jade',defaultRate:1,cap:0,rates:{網購:3,行動支付:3,'超市量販':2}},
-    {id:uid(),name:'旅遊聯名卡',theme:'ocean',defaultRate:1.2,cap:0,rates:{'旅遊住宿':5,交通:3,餐飲:2}},
-    {id:uid(),name:'餐飲娛樂神卡',theme:'berry',defaultRate:0.5,cap:500,rates:{餐飲:5,'娛樂訂閱':5,'百貨服飾':2}},
+    {id:uid(),name:'富邦 J 卡',theme:'midnight',defaultRate:1,cap:0,rates:{日本:6,韓國:6,'旅遊住宿':6}},
+    {id:uid(),name:'星展 eco 永續卡',theme:'forest',defaultRate:1,cap:0,rates:{日本:5,韓國:5}},
+    {id:uid(),name:'中信 LINE Pay 卡',theme:'plum',defaultRate:1,cap:0,rates:{日本:5,韓國:5,'其他海外':2.8}},
+    {id:uid(),name:'永豐 幣倍卡',theme:'ocean',defaultRate:1,cap:0,rates:{日本:3,韓國:3,'其他海外':3}},
+    {id:uid(),name:'滙豐 現金回饋御璽卡',theme:'slate',defaultRate:1.22,cap:0,rates:{日本:2.22,韓國:2.22,'其他海外':2.22}},
   ];
   records=[];
   if(SEED_MODE==='full'){
@@ -1123,7 +1126,7 @@ function enterCloud(name,token,data,isNew){
   else{saveCards();saveRecs();}
   document.getElementById('authScreen').classList.remove('on');
   document.getElementById('clPass').value='';
-  currentMonth='ALL';rankCat='餐飲';
+  currentMonth='ALL';rankCat='日本';
   document.getElementById('rDate').value=todayStr();
   document.querySelector('.tabs button[data-tab="overview"]').click();
   renderUserButton();setSync('ok');renderAll();
@@ -1220,7 +1223,7 @@ function enterApp(u){
   load();
   if(!cards.length&&!records.length)seed();
   load();
-  currentMonth='ALL'; rankCat='餐飲';
+  currentMonth='ALL'; rankCat='日本';
   document.getElementById('rDate').value=todayStr();
   document.querySelector('.tabs button[data-tab="overview"]').click();
   renderUserButton();
