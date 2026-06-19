@@ -592,7 +592,7 @@ const THEMES={
 const THEME_KEYS=Object.keys(THEMES);
 
 const CATEGORIES=[
-  ['日本','🇯🇵'],['韓國','🇰🇷'],['其他海外','🌐'],
+  ['日本','🇯🇵'],['韓國','🇰🇷'],['泰國','🇹🇭'],['其他海外','🌐'],
   ['餐飲','🍜'],['網購','🛒'],['行動支付','📱'],['超市量販','🧺'],
   ['加油','⛽'],['交通','🚆'],['旅遊住宿','✈️'],['百貨服飾','🛍️'],
   ['娛樂訂閱','🎬'],['醫療','💊'],['一般消費','💳'],['其他','📦'],
@@ -651,11 +651,11 @@ function avatarGrad(name){const [a,b]=THEMES[avatarTheme(name)];return `linear-g
 function seed(){
   if(localStorage.getItem(uk('seen'))) return;
   cards = (SEED_MODE==='none') ? [] : [
-    {id:uid(),name:'富邦 J 卡',theme:'midnight',defaultRate:1,cap:0,rates:{日本:6,韓國:6,'旅遊住宿':6}},
-    {id:uid(),name:'星展 eco 永續卡',theme:'forest',defaultRate:1,cap:0,rates:{日本:5,韓國:5}},
-    {id:uid(),name:'中信 LINE Pay 卡',theme:'plum',defaultRate:1,cap:0,rates:{日本:5,韓國:5,'其他海外':2.8}},
-    {id:uid(),name:'永豐 幣倍卡',theme:'ocean',defaultRate:1,cap:0,rates:{日本:3,韓國:3,'其他海外':3}},
-    {id:uid(),name:'滙豐 現金回饋御璽卡',theme:'slate',defaultRate:1.22,cap:0,rates:{日本:2.22,韓國:2.22,'其他海外':2.22}},
+    {id:uid(),name:'富邦 J 卡',theme:'midnight',defaultRate:1,cap:1000,rates:{日本:3,韓國:3,泰國:3}},
+    {id:uid(),name:'玉山 熊本熊卡',theme:'gold',defaultRate:1,cap:500,rates:{日本:8.5}},
+    {id:uid(),name:'聯邦 吉鶴卡',theme:'copper',defaultRate:1,cap:1200,rates:{日本:7}},
+    {id:uid(),name:'玉山 Unicard',theme:'jade',defaultRate:1,cap:0,rates:{日本:4.5,韓國:4.5,'其他海外':4.5}},
+    {id:uid(),name:'中信 LINE Pay 卡',theme:'forest',defaultRate:1,cap:450,rates:{日本:5,韓國:5,'其他海外':2.8}},
   ];
   records=[];
   if(SEED_MODE==='full'){
