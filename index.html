@@ -395,14 +395,14 @@
 
   <!-- TABS -->
   <nav class="tabs">
-    <button class="on" data-tab="overview">總覽</button>
-    <button data-tab="records">消費記錄</button>
+    <button class="on" data-tab="records">消費記錄</button>
+    <button data-tab="overview">總覽</button>
     <button data-tab="cards">我的卡片</button>
     <button data-tab="quick">速查表</button>
   </nav>
 
   <!-- ============ OVERVIEW ============ -->
-  <div class="tab-page on" id="tab-overview">
+  <div class="tab-page" id="tab-overview">
     <div class="grid">
 
       <div class="kpis">
@@ -439,7 +439,7 @@
   </div>
 
   <!-- ============ RECORDS ============ -->
-  <div class="tab-page" id="tab-records">
+  <div class="tab-page on" id="tab-records">
     <div class="grid">
       <div class="panel">
         <div class="panel-h"><h2>記一筆消費</h2><span class="hint">自動算回饋</span></div>
@@ -1147,7 +1147,7 @@ function enterCloud(name,token,data,isNew){
   document.getElementById('clPass').value='';
   currentMonth='ALL';rankCat='日本';
   document.getElementById('rDate').value=todayStr();
-  document.querySelector('.tabs button[data-tab="overview"]').click();
+  document.querySelector('.tabs button[data-tab="records"]').click();
   renderUserButton();setSync('ok');renderAll();
   if(isNew)schedulePush();
 }
@@ -1244,7 +1244,7 @@ function enterApp(u){
   load();
   currentMonth='ALL'; rankCat='日本';
   document.getElementById('rDate').value=todayStr();
-  document.querySelector('.tabs button[data-tab="overview"]').click();
+  document.querySelector('.tabs button[data-tab="records"]').click();
   renderUserButton();
   renderAll();
 }
