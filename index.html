@@ -643,6 +643,13 @@ const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMo
 const monthOf=d=>d.slice(0,7);
 const rateOf=(card,cat)=>{ if(card.rates && card.rates[cat]!=null && card.rates[cat]!=='') return +card.rates[cat]; return +card.defaultRate||0; };
 const cardById=id=>cards.find(c=>c.id===id);
+
+/* 現金(虛擬卡):記純現金支出,無回饋,不列入卡片管理/回饋排行 */
+const CASH_ID='__cash__';
+const CASH_GRAD=['#6f8f7d','#3f5a4c'];
+const isCash=id=>id===CASH_ID;
+const nameOf=id=>isCash(id)?'現金':(cardById(id)?cardById(id).name:'已刪除卡片');
+const colorOf=id=>isCash(id)?CASH_GRAD[0]:(THEMES[cardById(id)?.theme]||THEMES.slate)[0];
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1900);}
 function avatarTheme(name){let h=0;for(const ch of (name||'?'))h=(h*31+ch.charCodeAt(0))>>>0;return THEME_KEYS[h%THEME_KEYS.length];}
 function avatarGrad(name){const [a,b]=THEMES[avatarTheme(name)];return `linear-gradient(135deg,${a},${b})`;}
@@ -761,8 +768,8 @@ function renderHero(st){
   document.getElementById('heroSpend').textContent=fmt(st.spend);
   document.getElementById('heroCount').textContent=st.count;
   let best='—';
-  const entries=Object.entries(st.byCard).sort((a,b)=>b[1].cb-a[1].cb);
-  if(entries.length){const c=cardById(entries[0][0]); if(c) best=c.name;}
+  const entries=Object.entries(st.byCard).filter(([id,v])=>!isCash(id)&&v.cb>0).sort((a,b)=>b[1].cb-a[1].cb);
+  if(entries.length){best=nameOf(entries[0][0]);}
   document.getElementById('heroBestCard').textContent=best;
 }
 
@@ -810,9 +817,9 @@ function renderCharts(st){
   else{
     cc.style.display='block';ce.innerHTML='';
     chartCard=new Chart(cc,{type:'doughnut',data:{
-      labels:cardEntries.map(([id])=>cardById(id)?.name||'已刪除'),
+      labels:cardEntries.map(([id])=>nameOf(id)),
       datasets:[{data:cardEntries.map(([,v])=>v.spend),
-        backgroundColor:cardEntries.map(([id])=>(THEMES[cardById(id)?.theme]||THEMES.slate)[0]),
+        backgroundColor:cardEntries.map(([id])=>colorOf(id)),
         borderColor:'#FBFAF6',borderWidth:3,hoverOffset:6}]
     },options:{cutout:'62%',plugins:{legend:{position:'bottom',labels:{font:{family:"'Noto Sans TC'",size:12},padding:12,boxWidth:12,usePointStyle:true}},
       tooltip:{callbacks:{label:c=>` ${c.label}: NT$${fmt(c.parsed)}`}}},maintainAspectRatio:false}});
@@ -842,15 +849,17 @@ function renderRecords(){
   const el=document.getElementById('recList');
   if(!shown.length){el.innerHTML='<div class="empty"><span class="em">🧾</span>'+(records.length?'這個篩選沒有記錄':'還沒有消費記錄,上方記第一筆吧')+'</div>';return;}
   el.innerHTML=shown.map(r=>{
-    const c=cardById(r.cardId); const g=(THEMES[c?.theme]||THEMES.slate)[0];
-    const cbHtml=r.capped
-      ? `<span class="strike">+$${fmt(r.uncapped)}</span>+$${fmt(r.cashback)} · ${r.rate}%<span class="cap-tag">已封頂</span>`
-      : `+$${fmt(r.cashback)} · ${r.rate}%`;
+    const g=colorOf(r.cardId);
+    const cbHtml=isCash(r.cardId)
+      ? `<span style="color:var(--ink-faint)">現金 · 無回饋</span>`
+      : (r.capped
+        ? `<span class="strike">+$${fmt(r.uncapped)}</span>+$${fmt(r.cashback)} · ${r.rate}%<span class="cap-tag">已封頂</span>`
+        : `+$${fmt(r.cashback)} · ${r.rate}%`);
     return `<div class="rec">
-      <div class="rec-ico">${CAT_ICON[r.cat]||'💳'}</div>
+      <div class="rec-ico">${isCash(r.cardId)?'💵':(CAT_ICON[r.cat]||'💳')}</div>
       <div class="rec-mid">
         <div class="t">${esc(r.note||r.cat)}</div>
-        <div class="s"><span class="dot" style="background:${g}"></span>${esc(c?c.name:'已刪除卡片')} · ${r.cat} · ${r.date.slice(5)}</div>
+        <div class="s"><span class="dot" style="background:${g}"></span>${esc(nameOf(r.cardId))} · ${r.cat} · ${r.date.slice(5)}</div>
       </div>
       <div class="rec-right">
         <div class="amt">$${fmt(r.amount)}</div>
@@ -926,12 +935,13 @@ function renderQuickTable(){
 
 function refreshSelects(){
   const opts=cards.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const cashOpt=`<option value="${CASH_ID}">💵 現金</option>`;
   const rCard=document.getElementById('rCard');
   const prev=rCard.value;
-  rCard.innerHTML=opts||'<option value="">請先新增卡片</option>';
-  if(cards.find(c=>c.id===prev))rCard.value=prev;
+  rCard.innerHTML=opts+cashOpt;
+  if(prev===CASH_ID||cards.find(c=>c.id===prev))rCard.value=prev;
   document.getElementById('rCat').innerHTML=CATEGORIES.map(([c,ic])=>`<option value="${c}">${ic} ${c}</option>`).join('');
-  document.getElementById('filterCard').innerHTML='<option value="">全部卡片</option>'+opts;
+  document.getElementById('filterCard').innerHTML='<option value="">全部卡片</option>'+opts+cashOpt;
   document.getElementById('filterCat').innerHTML='<option value="">全部類別</option>'+CATEGORIES.map(([c,ic])=>`<option value="${c}">${ic} ${c}</option>`).join('');
   updatePreview();
 }
@@ -945,9 +955,10 @@ function updatePreview(){
   const cid=document.getElementById('rCard').value;
   const cat=document.getElementById('rCat').value;
   const amt=+document.getElementById('rAmount').value||0;
-  const c=cardById(cid);
   const prevRate=document.getElementById('prevRate');
   const prevCb=document.getElementById('prevCashback');
+  if(isCash(cid)){prevRate.textContent='現金 · 無回饋';prevCb.textContent='0';return;}
+  const c=cardById(cid);
   if(!c){prevRate.textContent='—';prevCb.textContent='0';return;}
   const r=rateOf(c,cat);
   const raw=Math.round(amt*r/100);
@@ -962,18 +973,26 @@ function updatePreview(){
 }
 function addRecord(){
   const cid=document.getElementById('rCard').value;
-  const c=cardById(cid);
   const amt=+document.getElementById('rAmount').value;
-  if(!c){toast('請先新增一張卡片');return;}
   if(!amt||amt<=0){toast('請輸入金額');return;}
   const cat=document.getElementById('rCat').value;
-  const r=rateOf(c,cat);
-  const rec={id:uid(),date:document.getElementById('rDate').value||todayStr(),cardId:cid,cat,amount:amt,rate:r,cashback:Math.round(amt*r/100),note:document.getElementById('rNote').value.trim()};
+  const date=document.getElementById('rDate').value||todayStr();
+  const note=document.getElementById('rNote').value.trim();
+  let rec;
+  if(isCash(cid)){
+    rec={id:uid(),date,cardId:CASH_ID,cat,amount:amt,rate:0,cashback:0,note};
+  }else{
+    const c=cardById(cid);
+    if(!c){toast('請先新增一張卡片,或選擇「現金」');return;}
+    const r=rateOf(c,cat);
+    rec={id:uid(),date,cardId:cid,cat,amount:amt,rate:r,cashback:Math.round(amt*r/100),note};
+  }
   records.push(rec);
   document.getElementById('rAmount').value='';document.getElementById('rNote').value='';
   renderAll();
   schedulePush();
-  toast(rec.capped?`已新增 · 回饋 +$${fmt(rec.cashback)}(已達上限)`:`已新增 · 回饋 +$${fmt(rec.cashback)}`);
+  toast(isCash(cid)?`已記錄現金支出 $${fmt(amt)}`
+    :(rec.capped?`已新增 · 回饋 +$${fmt(rec.cashback)}(已達上限)`:`已新增 · 回饋 +$${fmt(rec.cashback)}`));
 }
 
 /* ============================================================
