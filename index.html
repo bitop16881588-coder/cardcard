@@ -124,6 +124,19 @@
   .kpi .v small{font-size:.5em;color:var(--ink-faint);font-weight:500;margin-right:2px}
   .kpi.accent .v{color:var(--jade)}
 
+  /* card / cash split */
+  .split-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .split-item{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 13px}
+  .split-item .k{font-size:11.5px;color:var(--ink-soft);font-weight:600}
+  .split-item .v{font-family:var(--num);font-size:21px;font-weight:600;margin-top:4px;letter-spacing:-.02em}
+  .split-item .v small{font-size:.5em;color:var(--ink-faint);font-weight:500;margin-right:2px}
+  .split-item.total{background:var(--jade-soft);border-color:rgba(31,122,92,.28)}
+  .split-item.total .v{color:var(--jade-deep)}
+  .split-bar{display:flex;height:10px;border-radius:99px;overflow:hidden;margin-top:14px;background:var(--surface-2)}
+  .split-seg{height:100%;transition:width .4s}
+  .split-seg.card{background:var(--jade)}
+  .split-seg.cash{background:#6f8f7d}
+
   /* ranking / recommender */
   .cat-chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .cat-chips::-webkit-scrollbar{display:none}
@@ -409,6 +422,17 @@
         <div class="kpi accent"><div class="k">💰 回饋總額</div><div class="v"><small>NT$</small><span id="kCashback">0</span></div></div>
         <div class="kpi"><div class="k">🧾 消費總額</div><div class="v"><small>NT$</small><span id="kSpend">0</span></div></div>
         <div class="kpi"><div class="k">⚡ 有效回饋率</div><div class="v"><span id="kRate">0</span><small style="margin-left:2px">%</small></div></div>
+      </div>
+
+      <!-- card / cash spending split -->
+      <div class="panel">
+        <div class="panel-h"><h2>本期消費(刷卡 / 現金)</h2><span class="hint" id="splitMonth"></span></div>
+        <div class="split-row">
+          <div class="split-item"><div class="k">💳 刷卡消費</div><div class="v"><small>NT$</small><span id="splitCard">0</span></div></div>
+          <div class="split-item"><div class="k">💵 現金消費</div><div class="v"><small>NT$</small><span id="splitCash">0</span></div></div>
+          <div class="split-item total"><div class="k">合計</div><div class="v"><small>NT$</small><span id="splitTotal">0</span></div></div>
+        </div>
+        <div class="split-bar" id="splitBar"><div class="split-seg card" id="splitBarCard"></div><div class="split-seg cash" id="splitBarCash"></div></div>
       </div>
 
       <!-- ranking -->
@@ -743,6 +767,7 @@ function renderAll(){
   const recs=filtered(), st=stats(recs);
   renderHero(st);
   renderKPIs(st);
+  renderSplit(st);
   renderRanking();
   renderCharts(st);
   renderRecords();
@@ -777,6 +802,18 @@ function renderKPIs(st){
   document.getElementById('kCashback').textContent=fmt(st.cb);
   document.getElementById('kSpend').textContent=fmt(st.spend);
   document.getElementById('kRate').textContent=st.rate.toFixed(2);
+}
+
+function renderSplit(st){
+  const cash=st.byCard[CASH_ID]?st.byCard[CASH_ID].spend:0;
+  const card=st.spend-cash;
+  document.getElementById('splitCard').textContent=fmt(card);
+  document.getElementById('splitCash').textContent=fmt(cash);
+  document.getElementById('splitTotal').textContent=fmt(st.spend);
+  const total=st.spend||1;
+  document.getElementById('splitBarCard').style.width=(card/total*100)+'%';
+  document.getElementById('splitBarCash').style.width=(cash/total*100)+'%';
+  document.getElementById('splitMonth').textContent=(currentMonth==='ALL'?'全部月份':(currentMonth.replace('-',' 年 ')+' 月'));
 }
 
 function renderRanking(){
