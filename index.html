@@ -278,9 +278,15 @@
   .cat-rate .pc{font-size:12px;color:var(--ink-soft)}
   .mini-link{font-size:11px;font-weight:700;color:var(--jade);background:var(--jade-soft);padding:2px 8px;border-radius:6px;margin-left:6px;border:none;cursor:pointer}
   .mini-link:hover{background:#d3e8df}
-  .cat-row{display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid var(--line-soft)}
-  .cat-row .ci{font-size:19px;width:28px;text-align:center;flex-shrink:0}
-  .cat-row .cn{flex:1;font-weight:600;font-size:14.5px}
+  .cat-row{display:flex;align-items:center;gap:9px;padding:11px 4px;border-bottom:1px solid var(--line-soft)}
+  .cat-row.dragging{opacity:.45}
+  .cat-row.over{background:var(--jade-soft);border-radius:8px}
+  .cat-row .grip{cursor:grab;color:var(--ink-faint);font-size:13px;flex-shrink:0;letter-spacing:-2px}
+  .cat-row .ci{font-size:19px;width:26px;text-align:center;flex-shrink:0}
+  .cat-row .cn{flex:1;font-weight:600;font-size:14.5px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .cat-row .cmv{width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-size:11px;flex-shrink:0;cursor:pointer}
+  .cat-row .cmv:hover:not(:disabled){background:var(--surface-2);color:var(--ink)}
+  .cat-row .cmv:disabled{opacity:.3;cursor:default}
   .cat-row .cx{width:30px;height:30px;border-radius:8px;color:var(--ink-faint);font-size:15px;flex-shrink:0;border:none;background:none;cursor:pointer}
   .cat-row .cx:hover{background:rgba(192,96,74,.1);color:var(--rose)}
   #cNote{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;resize:vertical;width:100%}
@@ -1182,8 +1188,41 @@ function openCatModal(){renderCatList();document.getElementById('catModal').clas
 function closeCatModal(){document.getElementById('catModal').classList.remove('on');}
 function renderCatList(){
   const el=document.getElementById('catList');
-  el.innerHTML=categories.map((c,i)=>`<div class="cat-row"><span class="ci">${c[1]||'🏷️'}</span><span class="cn">${esc(c[0])}</span><button class="cx" data-i="${i}">✕</button></div>`).join('');
-  el.querySelectorAll('.cx').forEach(b=>b.onclick=()=>deleteCat(+b.dataset.i));
+  el.innerHTML=categories.map((c,i)=>`<div class="cat-row" draggable="true" data-i="${i}">
+    <span class="grip">⣿</span>
+    <span class="ci">${c[1]||'🏷️'}</span>
+    <span class="cn">${esc(c[0])}</span>
+    <button class="cmv" data-i="${i}" data-d="-1" ${i===0?'disabled':''}>▲</button>
+    <button class="cmv" data-i="${i}" data-d="1" ${i===categories.length-1?'disabled':''}>▼</button>
+    <button class="cx" data-i="${i}">✕</button>
+  </div>`).join('');
+  el.querySelectorAll('.cx').forEach(b=>b.onclick=e=>{e.stopPropagation();deleteCat(+b.dataset.i);});
+  el.querySelectorAll('.cmv').forEach(b=>b.onclick=e=>{e.stopPropagation();moveCat(+b.dataset.i,+b.dataset.d);});
+  let from=null;
+  el.querySelectorAll('.cat-row').forEach(row=>{
+    row.addEventListener('dragstart',()=>{from=+row.dataset.i;row.classList.add('dragging');});
+    row.addEventListener('dragend',()=>{from=null;el.querySelectorAll('.cat-row').forEach(r=>r.classList.remove('dragging','over'));});
+    row.addEventListener('dragover',e=>{e.preventDefault();});
+    row.addEventListener('dragenter',()=>row.classList.add('over'));
+    row.addEventListener('dragleave',()=>row.classList.remove('over'));
+    row.addEventListener('drop',e=>{
+      e.preventDefault();
+      const to=+row.dataset.i;
+      if(from===null||from===to)return;
+      const [m]=categories.splice(from,1);
+      categories.splice(to,0,m);
+      commitCats();
+    });
+  });
+}
+function moveCat(i,dir){
+  const j=i+dir;
+  if(j<0||j>=categories.length)return;
+  const t=categories[i];categories[i]=categories[j];categories[j]=t;
+  commitCats();
+}
+function commitCats(){
+  saveCats();renderCatList();refreshSelects();renderAll();schedulePush();
 }
 function addCat(){
   const name=document.getElementById('newCatName').value.trim();
@@ -1191,18 +1230,23 @@ function addCat(){
   if(!name){toast('請輸入通路名稱');return;}
   if(categories.some(c=>c[0]===name)){toast('這個通路已存在');return;}
   categories.push([name,icon]);
-  saveCats();
   document.getElementById('newCatName').value='';document.getElementById('newCatIcon').value='';
-  renderCatList();refreshSelects();renderAll();schedulePush();
+  commitCats();
   toast('已新增通路');
 }
 function deleteCat(i){
   const c=categories[i]; if(!c)return;
-  const used=records.some(r=>r.cat===c[0]);
-  if(!confirm('刪除通路「'+c[0]+'」?'+(used?'(已有消費記錄使用,記錄會保留)':'')))return;
+  const name=c[0];
+  const usedRec=records.some(r=>r.cat===name);
+  const usedCard=cards.some(cd=>(cd.rates&&cd.rates[name]!=null)||(cd.bonusRates&&cd.bonusRates[name]!=null));
+  if(!confirm('刪除通路「'+name+'」?'+(usedRec?'(已有消費記錄使用,記錄會保留)':'')))return;
   categories.splice(i,1);
   saveCats();
-  renderCatList();refreshSelects();renderAll();schedulePush();
+  if(usedCard && confirm('是否一併清除各卡在「'+name+'」的回饋趴數設定?\n\n確定=清除;取消=保留(日後再新增同名通路會沿用)。')){
+    cards.forEach(cd=>{ if(cd.rates) delete cd.rates[name]; if(cd.bonusRates) delete cd.bonusRates[name]; });
+    saveCards();
+  }
+  commitCats();
   toast('已刪除通路');
 }
 
@@ -1394,11 +1438,12 @@ async function pullTemplate(){
     if(!r||!r.ok){toast((r&&r.error)||'更新失敗');return;}
     if(!r.cards||!r.cards.length){toast('範本目前沒有卡片');return;}
     cards=r.cards;
+    if(r.cats&&r.cats.length){categories=r.cats;saveCats();}
     saveCards();
     closeAcct();
     renderAll();
     schedulePush();
-    toast('已從範本更新卡片');
+    toast('已從範本更新卡片與通路');
   }catch(e){toast('連線失敗,請確認網路');}
 }
 async function mergeTemplate(){
@@ -1412,6 +1457,11 @@ async function mergeTemplate(){
     const tplIds=new Set(tpl.map(c=>c.id));
     const own=cards.filter(c=>!tplIds.has(c.id));   // 你自己新增的卡(不在範本內)
     cards=[...tpl, ...own];                           // 範本卡更新 + 保留自建卡
+    if(r.cats&&r.cats.length){                        // 合併通路:範本 + 自建(依名稱去重)
+      const names=new Set(r.cats.map(c=>c[0]));
+      categories=[...r.cats, ...categories.filter(c=>!names.has(c[0]))];
+      saveCats();
+    }
     saveCards();
     closeAcct();
     renderAll();
