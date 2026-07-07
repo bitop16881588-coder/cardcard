@@ -563,7 +563,8 @@
         <div class="field full"><label>卡片名稱</label><input type="text" id="cName" placeholder="例:玉山 Pi 拍錢包卡"></div>
         <div class="field"><label>預設回饋 (%)</label><input type="number" id="cRate" class="num" placeholder="1" step="0.1" min="0"></div>
         <div class="field"><label>每月回饋總上限 (NT$,選填)</label><input type="number" id="cCap" class="num" placeholder="無上限" min="0"></div>
-        <div class="field"><label>達標回饋上限 (NT$/月,選填)</label><input type="number" id="cBonusCap" class="num" placeholder="無上限" min="0"></div>
+        <div class="field"><label>達標回饋上限 (NT$,選填)</label><input type="number" id="cBonusCap" class="num" placeholder="無上限" min="0"></div>
+        <div class="field"><label>達標上限週期</label><select id="cBonusPeriod"><option value="month">每月</option><option value="quarter">每季(累計整季)</option></select></div>
         <div class="field full"><label>卡片顏色</label><div class="swatches" id="swatches"></div></div>
         <div class="field full"><label>備註(選填,如達標條件、登錄提醒)</label><textarea id="cNote" rows="2" placeholder="例:LINE Pay 需每月登錄;達標=當月一般消費滿 NT$3,000"></textarea></div>
         <div class="field full">
@@ -704,6 +705,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const fmt=n=>Math.round(n).toLocaleString('zh-TW');
 const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const monthOf=d=>d.slice(0,7);
+const quarterOf=d=>{const [y,m]=d.split('-');return y+'-Q'+(Math.floor((+m-1)/3)+1);};
 const rateOf=(card,cat)=>{ if(card.rates && card.rates[cat]!=null && card.rates[cat]!=='') return +card.rates[cat]; return +card.defaultRate||0; };
 const bonusRateOf=(card,cat)=>{ if(card.bonusRates && card.bonusRates[cat]!=null && card.bonusRates[cat]!=='') return +card.bonusRates[cat]; return null; };
 const effRate=(card,cat,bonus)=>{ if(bonus){ const b=bonusRateOf(card,cat); if(b!=null) return b; } return rateOf(card,cat); };
@@ -769,31 +771,35 @@ function stats(recs){
    每月、每卡的回饋累積到上限後自動封頂,超出部分回饋以 0 計。
    依日期先後順序計算,所以新增/刪除/改上限後都會自動重算。 */
 function syncCashbacks(){
-  const groups={};
-  records.forEach(r=>{const k=r.cardId+'|'+monthOf(r.date);(groups[k]=groups[k]||[]).push(r);});
-  Object.values(groups).forEach(recs=>{
+  const byCard={};
+  records.forEach(r=>{(byCard[r.cardId]=byCard[r.cardId]||[]).push(r);});
+  Object.values(byCard).forEach(recs=>{
     const card=cardById(recs[0].cardId);
     const cap=(card&&card.cap)?+card.cap:0;
     const bonusCap=(card&&card.bonusCap)?+card.bonusCap:0;
+    const bPeriod=(card&&card.bonusCapPeriod)||'month';
     recs.sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
-    let acc=0, accBonus=0;
+    const accTotal={};  // 每月:總回饋上限累計
+    const accBonus={};  // 每月或每季:達標回饋上限累計
     recs.forEach(r=>{
       const rate=card?effRate(card,r.cat,r.bonus):(+r.rate||0);
       r.rate=rate;
       const raw=Math.round(r.amount*rate/100);
       r.uncapped=raw;
       let cb=raw, capped=false;
+      const mk=monthOf(r.date);
+      const bk=bPeriod==='quarter'?quarterOf(r.date):mk;
       if(card && r.bonus && bonusCap>0){
-        const broom=Math.max(0,bonusCap-accBonus);
+        const broom=Math.max(0,bonusCap-(accBonus[bk]||0));
         if(cb>broom){cb=broom;capped=true;}
       }
       if(cap>0){
-        const room=Math.max(0,cap-acc);
+        const room=Math.max(0,cap-(accTotal[mk]||0));
         if(cb>room){cb=room;capped=true;}
       }
       r.cashback=cb; r.capped=capped;
-      acc+=cb;
-      if(r.bonus) accBonus+=cb;
+      accTotal[mk]=(accTotal[mk]||0)+cb;
+      if(r.bonus) accBonus[bk]=(accBonus[bk]||0)+cb;
     });
   });
 }
@@ -803,9 +809,15 @@ function cardMonthCashback(cardId,ym){
   return records.filter(r=>r.cardId===cardId&&monthOf(r.date)===ym)
     .reduce((s,r)=>s+r.cashback,0);
 }
-/* 指定卡片某月的「達標」回饋(用於達標上限進度條) */
+/* 指定卡片某月的「達標」回饋(每月上限用) */
 function cardMonthBonusCashback(cardId,ym){
   return records.filter(r=>r.cardId===cardId&&r.bonus&&monthOf(r.date)===ym)
+    .reduce((s,r)=>s+r.cashback,0);
+}
+/* 指定卡片、含 ym 那一季的「達標」回饋(每季上限用) */
+function cardQuarterBonusCashback(cardId,ym){
+  const q=quarterOf(ym+'-01');
+  return records.filter(r=>r.cardId===cardId&&r.bonus&&quarterOf(r.date)===q)
     .reduce((s,r)=>s+r.cashback,0);
 }
 
@@ -1007,11 +1019,13 @@ function renderCards(){
       </div>`;
     }
     if(c.bonusCap){
-      const bused=cardMonthBonusCashback(c.id,capMonth);
+      const quarterly=c.bonusCapPeriod==='quarter';
+      const bused=quarterly?cardQuarterBonusCashback(c.id,capMonth):cardMonthBonusCashback(c.id,capMonth);
       const bpct=Math.min(100,bused/c.bonusCap*100);
       const bfull=bused>=c.bonusCap;
+      const blabel=quarterly?('第'+quarterOf(capMonth+'-01').split('-Q')[1]+'季達標上限'):(+mm+'月達標回饋上限');
       capHtml+=`<div class="cap-wrap">
-        <div class="cap-head"><span>${+mm}月達標回饋上限${bfull?' · 已封頂':''}</span><span><span class="num">$${fmt(bused)}</span> / $${fmt(c.bonusCap)}</span></div>
+        <div class="cap-head"><span>${blabel}${bfull?' · 已封頂':''}</span><span><span class="num">$${fmt(bused)}</span> / $${fmt(c.bonusCap)}</span></div>
         <div class="cap-track"><div class="cap-fill bonus ${bfull?'full':''}" style="width:${bpct}%"></div></div>
       </div>`;
     }
@@ -1158,6 +1172,7 @@ function openCardModal(id){
   document.getElementById('cRate').value=c?c.defaultRate:'';
   document.getElementById('cCap').value=c&&c.cap?c.cap:'';
   document.getElementById('cBonusCap').value=c&&c.bonusCap?c.bonusCap:'';
+  document.getElementById('cBonusPeriod').value=(c&&c.bonusCapPeriod)||'month';
   document.getElementById('cNote').value=c&&c.note?c.note:'';
   modalTheme=c?c.theme:'jade';
   document.querySelectorAll('.sw').forEach(x=>x.classList.toggle('on',x.dataset.theme===modalTheme));
@@ -1177,15 +1192,16 @@ function saveCard(){
   const defaultRate=+document.getElementById('cRate').value||0;
   const cap=+document.getElementById('cCap').value||0;
   const bonusCap=+document.getElementById('cBonusCap').value||0;
+  const bonusCapPeriod=document.getElementById('cBonusPeriod').value||'month';
   const note=document.getElementById('cNote').value.trim();
   const rates={}, bonusRates={};
   document.querySelectorAll('#catRates .r-base').forEach(inp=>{ if(inp.value!=='') rates[inp.dataset.cat]=+inp.value; });
   document.querySelectorAll('#catRates .r-bonus').forEach(inp=>{ if(inp.value!=='') bonusRates[inp.dataset.cat]=+inp.value; });
   if(editingCardId){
     const c=cardById(editingCardId);
-    Object.assign(c,{name,defaultRate,cap,bonusCap,theme:modalTheme,rates,bonusRates,note});
+    Object.assign(c,{name,defaultRate,cap,bonusCap,bonusCapPeriod,theme:modalTheme,rates,bonusRates,note});
   }else{
-    cards.push({id:uid(),name,defaultRate,cap,bonusCap,theme:modalTheme,rates,bonusRates,note});
+    cards.push({id:uid(),name,defaultRate,cap,bonusCap,bonusCapPeriod,theme:modalTheme,rates,bonusRates,note});
   }
   saveCards();closeCardModal();renderAll();schedulePush();toast('卡片已儲存');
 }
