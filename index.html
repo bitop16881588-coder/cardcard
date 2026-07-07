@@ -239,6 +239,14 @@
     display:flex;flex-direction:column;box-shadow:0 8px 22px rgba(0,0,0,.16);cursor:pointer;transition:.2s;
   }
   .credit:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(0,0,0,.22)}
+  .credit.dragging{opacity:.45}
+  .credit.over{outline:2px dashed rgba(255,255,255,.75);outline-offset:-4px}
+  .c-move{position:absolute;top:9px;left:9px;z-index:3;display:flex;gap:5px;opacity:0;transition:.15s}
+  .credit:hover .c-move{opacity:1}
+  .cmv-btn{width:27px;height:24px;border-radius:6px;background:rgba(0,0,0,.32);color:#fff;font-size:11px;border:none;cursor:pointer;backdrop-filter:blur(2px)}
+  .cmv-btn:hover:not(:disabled){background:rgba(0,0,0,.5)}
+  .cmv-btn:disabled{opacity:.3;cursor:default}
+  @media(hover:none){.c-move{opacity:.9}}
   .credit::after{content:"";position:absolute;right:-30px;bottom:-40px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.08)}
   .credit .c-top{display:flex;justify-content:space-between;align-items:flex-start}
   .credit .c-emv{width:32px;height:24px;border-radius:5px;background:linear-gradient(135deg,#f6e2a8,#cda94f);position:relative}
@@ -1040,7 +1048,7 @@ function renderCards(){
   const grid=document.getElementById('cardGrid');
   const capMonth=currentMonth==='ALL'?monthOf(todayStr()):currentMonth;
   const [my,mm]=capMonth.split('-');
-  grid.innerHTML=cards.map(c=>{
+  grid.innerHTML=cards.map((c,i)=>{
     const [g1,g2]=THEMES[c.theme]||THEMES.jade;
     const bonus=c.rates?Object.entries(c.rates).filter(([,v])=>v!==''&&v!=null):[];
     let capHtml='';
@@ -1064,7 +1072,11 @@ function renderCards(){
         <div class="cap-track"><div class="cap-fill bonus ${bfull?'full':''}" style="width:${bpct}%"></div></div>
       </div>`;
     }
-    return `<div class="credit" data-id="${c.id}" style="background:linear-gradient(135deg,${g1},${g2})">
+    return `<div class="credit" draggable="true" data-id="${c.id}" data-i="${i}" style="background:linear-gradient(135deg,${g1},${g2})">
+      <div class="c-move">
+        <button class="cmv-btn" data-i="${i}" data-d="-1" ${i===0?'disabled':''}>◀</button>
+        <button class="cmv-btn" data-i="${i}" data-d="1" ${i===cards.length-1?'disabled':''}>▶</button>
+      </div>
       <div class="c-top">
         <div class="c-emv"></div>
         <div class="c-rate"><div class="p">${c.defaultRate||0}%</div><div class="l">預設回饋</div></div>
@@ -1079,7 +1091,30 @@ function renderCards(){
   }).join('')+`<button class="add-card" id="addCardBtn"><span><span class="plus">＋</span>新增卡片</span></button>`;
 
   grid.querySelectorAll('.credit').forEach(el=>el.onclick=()=>openCardModal(el.dataset.id));
+  grid.querySelectorAll('.cmv-btn').forEach(b=>b.onclick=e=>{e.stopPropagation();moveCard(+b.dataset.i,+b.dataset.d);});
+  let cFrom=null;
+  grid.querySelectorAll('.credit').forEach(el=>{
+    el.addEventListener('dragstart',()=>{cFrom=+el.dataset.i;el.classList.add('dragging');});
+    el.addEventListener('dragend',()=>{cFrom=null;grid.querySelectorAll('.credit').forEach(x=>x.classList.remove('dragging','over'));});
+    el.addEventListener('dragover',e=>e.preventDefault());
+    el.addEventListener('dragenter',()=>el.classList.add('over'));
+    el.addEventListener('dragleave',()=>el.classList.remove('over'));
+    el.addEventListener('drop',e=>{
+      e.preventDefault();
+      const to=+el.dataset.i;
+      if(cFrom===null||cFrom===to)return;
+      const [m]=cards.splice(cFrom,1);
+      cards.splice(to,0,m);
+      saveCards();renderAll();schedulePush();
+    });
+  });
   document.getElementById('addCardBtn').onclick=()=>openCardModal(null);
+}
+function moveCard(i,dir){
+  const j=i+dir;
+  if(j<0||j>=cards.length)return;
+  const t=cards[i];cards[i]=cards[j];cards[j]=t;
+  saveCards();renderAll();schedulePush();
 }
 
 function renderQuickTable(){
