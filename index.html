@@ -616,6 +616,8 @@
     <div class="sheet-b">
       <div class="acct-cur" id="acctCur"></div>
       <button class="acct-item" id="acctSwitch">🔄 切換使用者</button>
+      <button class="acct-item" id="acctTemplate">🗂️ 從範本更新我的卡片</button>
+      <button class="acct-item" id="acctMerge">🧩 匯入範本卡片(保留自建卡)</button>
       <button class="acct-item" id="acctRename">✏️ 重新命名</button>
       <button class="acct-item" id="acctPin">🔒 設定 / 變更密碼</button>
       <button class="acct-item" id="acctClearRecs">🧹 清除所有消費記錄(保留卡片)</button>
@@ -1309,6 +1311,39 @@ async function cloudSetPass(){
     toast(r&&r.ok?'密碼已變更':((r&&r.error)||'變更失敗'));
   }catch(e){toast('連線失敗');}
 }
+async function pullTemplate(){
+  if(!CLOUD()||!currentUser||!currentUser.token){toast('僅雲端帳號可用');return;}
+  if(!confirm('用最新的範本卡片覆蓋你目前的卡片?消費記錄會保留,此動作無法復原。'))return;
+  try{
+    const r=await api({action:'template',username:currentUser.name,token:currentUser.token});
+    if(!r||!r.ok){toast((r&&r.error)||'更新失敗');return;}
+    if(!r.cards||!r.cards.length){toast('範本目前沒有卡片');return;}
+    cards=r.cards;
+    saveCards();
+    closeAcct();
+    renderAll();
+    schedulePush();
+    toast('已從範本更新卡片');
+  }catch(e){toast('連線失敗,請確認網路');}
+}
+async function mergeTemplate(){
+  if(!CLOUD()||!currentUser||!currentUser.token){toast('僅雲端帳號可用');return;}
+  if(!confirm('匯入範本卡片:範本內的卡片會更新為最新版,你自己新增的卡片會保留。確定?'))return;
+  try{
+    const r=await api({action:'template',username:currentUser.name,token:currentUser.token});
+    if(!r||!r.ok){toast((r&&r.error)||'更新失敗');return;}
+    const tpl=r.cards||[];
+    if(!tpl.length){toast('範本目前沒有卡片');return;}
+    const tplIds=new Set(tpl.map(c=>c.id));
+    const own=cards.filter(c=>!tplIds.has(c.id));   // 你自己新增的卡(不在範本內)
+    cards=[...tpl, ...own];                           // 範本卡更新 + 保留自建卡
+    saveCards();
+    closeAcct();
+    renderAll();
+    schedulePush();
+    toast(`已匯入範本卡片,保留 ${own.length} 張自建卡`);
+  }catch(e){toast('連線失敗,請確認網路');}
+}
 
 /* ============================================================
    AUTH / USERS
@@ -1413,6 +1448,8 @@ function openAcct(){
   document.getElementById('acctCur').innerHTML=acctCurHtml();
   const cloud=CLOUD();
   document.getElementById('acctSwitch').textContent=cloud?'🚪 登出':'🔄 切換使用者';
+  document.getElementById('acctTemplate').style.display=cloud?'':'none';
+  document.getElementById('acctMerge').style.display=cloud?'':'none';
   document.getElementById('acctPin').textContent=cloud?'🔒 變更雲端密碼':'🔒 設定 / 變更密碼';
   document.getElementById('acctRename').style.display=cloud?'none':'';
   document.getElementById('acctDelete').style.display=cloud?'none':'';
@@ -1472,6 +1509,8 @@ function bindAuth(){
   document.getElementById('acctClose').onclick=closeAcct;
   document.getElementById('acctModal').onclick=e=>{if(e.target.id==='acctModal')closeAcct();};
   document.getElementById('acctSwitch').onclick=()=>{if(CLOUD())logoutCloud();else{closeAcct();showAuth();}};
+  document.getElementById('acctTemplate').onclick=pullTemplate;
+  document.getElementById('acctMerge').onclick=mergeTemplate;
   document.getElementById('acctRename').onclick=renameUser;
   document.getElementById('acctPin').onclick=()=>{if(CLOUD())cloudSetPass();else setPin();};
   document.getElementById('acctClearRecs').onclick=clearAllRecords;
