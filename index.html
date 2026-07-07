@@ -255,11 +255,23 @@
   .sw{width:38px;height:38px;border-radius:10px;cursor:pointer;border:2px solid transparent;transition:.15s}
   .sw.on{border-color:var(--ink);transform:scale(1.06)}
   .cat-rates{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:6px}
-  .cat-rate{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
-  .cat-rate .nm{font-size:13px;flex:1;display:flex;align-items:center;gap:5px}
-  .cat-rate input{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 6px;font-family:var(--num);font-weight:600;font-size:13px;text-align:right;background:var(--surface);outline:none}
+  .cat-rate{display:flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
+  .cat-rate .nm{font-size:12.5px;flex:1;min-width:0;display:flex;align-items:center;gap:5px}
+  .cat-rate input{width:52px;flex-shrink:0;border:1px solid var(--line);border-radius:8px;padding:5px 6px;font-family:var(--num);font-weight:600;font-size:13px;text-align:right;background:var(--surface);outline:none}
+  .cat-rate input.r-bonus{border-color:rgba(191,142,60,.5);background:#fdf8ef}
   .cat-rate input:focus{border-color:var(--jade)}
+  .cat-rate.head{background:none;border:none;padding:0 10px;gap:6px}
+  .cat-rate.head .pch{width:52px;flex-shrink:0;text-align:center;font-size:10.5px;color:var(--ink-soft);font-weight:600}
   .cat-rate .pc{font-size:12px;color:var(--ink-soft)}
+  #cNote{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;resize:vertical;width:100%}
+  #cNote:focus{border-color:var(--jade);background:var(--surface);box-shadow:0 0 0 3px rgba(31,122,92,.12)}
+  .credit .c-note{position:relative;z-index:1;font-size:11px;opacity:.9;margin-top:8px;line-height:1.5;white-space:pre-wrap;background:rgba(0,0,0,.15);padding:6px 9px;border-radius:8px}
+  .bonus-toggle{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:var(--jade-deep);background:var(--jade-soft);border:1px solid rgba(31,122,92,.28);border-radius:11px;padding:11px 13px;cursor:pointer}
+  .bonus-toggle input{width:18px;height:18px;accent-color:var(--jade)}
+  .bonus-hint{color:var(--ink-soft);font-weight:500;font-family:var(--num)}
+  .bonus-tag{display:inline-block;font-size:9.5px;font-weight:700;color:#fff;background:var(--gold);padding:1px 6px;border-radius:6px;margin-left:5px}
+  .qt-bonus{display:block;font-size:10px;color:var(--gold);font-weight:600;margin-top:1px}
+  .qt td.best .qt-bonus{color:rgba(255,255,255,.9)}
 
   /* toast */
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 20px;border-radius:12px;font-size:13.5px;font-weight:600;z-index:80;opacity:0;transition:.25s;box-shadow:0 10px 30px rgba(0,0,0,.3);pointer-events:none}
@@ -473,6 +485,9 @@
           <div class="field"><label>使用卡片</label><select id="rCard"></select></div>
           <div class="field"><label>消費類別</label><select id="rCat"></select></div>
           <div class="field full"><label>備註(選填)</label><input type="text" id="rNote" placeholder="例:午餐、Uber、訂閱…"></div>
+          <div class="field full" id="bonusToggleWrap" style="display:none">
+            <label class="bonus-toggle"><input type="checkbox" id="rBonus"> <span>已達標加碼</span> <span class="bonus-hint" id="bonusHint"></span></label>
+          </div>
           <div class="preview">
             <div class="lbl">預估回饋 · <span id="prevRate">—</span></div>
             <div class="amt"><small>NT$</small><span id="prevCashback">0</span></div>
@@ -528,8 +543,9 @@
         <div class="field"><label>預設回饋 (%)</label><input type="number" id="cRate" class="num" placeholder="1" step="0.1" min="0"></div>
         <div class="field"><label>每月回饋上限 (NT$,選填)</label><input type="number" id="cCap" class="num" placeholder="無上限" min="0"></div>
         <div class="field full"><label>卡片顏色</label><div class="swatches" id="swatches"></div></div>
+        <div class="field full"><label>備註(選填,如達標條件、登錄提醒)</label><textarea id="cNote" rows="2" placeholder="例:LINE Pay 需每月登錄;達標=當月一般消費滿 NT$3,000"></textarea></div>
         <div class="field full">
-          <label>類別加碼回饋 (%) · 只填有加碼的</label>
+          <label>各通路回饋 (%) · 一般 / 達標加碼後總趴數</label>
           <div class="cat-rates" id="catRates"></div>
         </div>
       </div>
@@ -665,6 +681,8 @@ const fmt=n=>Math.round(n).toLocaleString('zh-TW');
 const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const monthOf=d=>d.slice(0,7);
 const rateOf=(card,cat)=>{ if(card.rates && card.rates[cat]!=null && card.rates[cat]!=='') return +card.rates[cat]; return +card.defaultRate||0; };
+const bonusRateOf=(card,cat)=>{ if(card.bonusRates && card.bonusRates[cat]!=null && card.bonusRates[cat]!=='') return +card.bonusRates[cat]; return null; };
+const effRate=(card,cat,bonus)=>{ if(bonus){ const b=bonusRateOf(card,cat); if(b!=null) return b; } return rateOf(card,cat); };
 const cardById=id=>cards.find(c=>c.id===id);
 
 /* 現金(虛擬卡):記純現金支出,無回饋,不列入卡片管理/回饋排行 */
@@ -735,7 +753,7 @@ function syncCashbacks(){
     recs.sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
     let acc=0;
     recs.forEach(r=>{
-      const rate=card?rateOf(card,r.cat):(+r.rate||0);
+      const rate=card?effRate(card,r.cat,r.bonus):(+r.rate||0);
       r.rate=rate;
       const raw=Math.round(r.amount*rate/100);
       r.uncapped=raw;
@@ -890,7 +908,7 @@ function renderRecords(){
       ? `<span style="color:var(--ink-faint)">現金 · 無回饋</span>`
       : (r.capped
         ? `<span class="strike">+$${fmt(r.uncapped)}</span>+$${fmt(r.cashback)} · ${r.rate}%<span class="cap-tag">已封頂</span>`
-        : `+$${fmt(r.cashback)} · ${r.rate}%`);
+        : `+$${fmt(r.cashback)} · ${r.rate}%${r.bonus?'<span class="bonus-tag">達標</span>':''}`);
     return `<div class="rec">
       <div class="rec-ico">${isCash(r.cardId)?'💵':(CAT_ICON[r.cat]||'💳')}</div>
       <div class="rec-mid">
@@ -933,8 +951,9 @@ function renderCards(){
       </div>
       <div class="c-name">${esc(c.name)}</div>
       <div class="c-meta">
-        ${bonus.length?bonus.map(([k,v])=>`<span class="c-badge">${CAT_ICON[k]||''}${k} ${v}%</span>`).join(''):'<span style="opacity:.7">點擊設定類別加碼</span>'}
+        ${bonus.length?bonus.map(([k,v])=>{const b=bonusRateOf(c,k);return `<span class="c-badge">${CAT_ICON[k]||''}${k} ${v}%${b!=null?`→${b}%`:''}</span>`;}).join(''):'<span style="opacity:.7">點擊設定通路回饋</span>'}
       </div>
+      ${c.note?`<div class="c-note">${esc(c.note)}</div>`:''}
       ${capHtml}
     </div>`;
   }).join('')+`<button class="add-card" id="addCardBtn"><span><span class="plus">＋</span>新增卡片</span></button>`;
@@ -960,8 +979,9 @@ function renderQuickTable(){
     cards.forEach((c,i)=>{
       const r=rates[i];
       const best=r===max&&max>0;
-      const bonus=c.rates&&c.rates[cat]!=null&&c.rates[cat]!=='';
-      h+=`<td class="${best?'best':''} ${bonus?'bonus':''}">${r}%${best?'<span class="crown">♔</span>':''}</td>`;
+      const hasCat=c.rates&&c.rates[cat]!=null&&c.rates[cat]!=='';
+      const b=bonusRateOf(c,cat);
+      h+=`<td class="${best?'best':''} ${hasCat?'bonus':''}">${r}%${best?'<span class="crown">♔</span>':''}${b!=null?`<span class="qt-bonus">達標 ${b}%</span>`:''}</td>`;
     });
     h+='</tr>';
   });
@@ -993,10 +1013,18 @@ function updatePreview(){
   const amt=+document.getElementById('rAmount').value||0;
   const prevRate=document.getElementById('prevRate');
   const prevCb=document.getElementById('prevCashback');
-  if(isCash(cid)){prevRate.textContent='現金 · 無回饋';prevCb.textContent='0';return;}
+  const wrap=document.getElementById('bonusToggleWrap');
+  const chk=document.getElementById('rBonus');
+  if(isCash(cid)){wrap.style.display='none';prevRate.textContent='現金 · 無回饋';prevCb.textContent='0';return;}
   const c=cardById(cid);
-  if(!c){prevRate.textContent='—';prevCb.textContent='0';return;}
-  const r=rateOf(c,cat);
+  if(!c){wrap.style.display='none';prevRate.textContent='—';prevCb.textContent='0';return;}
+  const bonus=bonusRateOf(c,cat);
+  if(bonus!=null){
+    wrap.style.display='';
+    document.getElementById('bonusHint').textContent='('+rateOf(c,cat)+'% → '+bonus+'%)';
+  }else{ wrap.style.display='none'; chk.checked=false; }
+  const useBonus=bonus!=null && chk.checked;
+  const r=effRate(c,cat,useBonus);
   const raw=Math.round(amt*r/100);
   let cb=raw, note='';
   if(c.cap){
@@ -1004,7 +1032,7 @@ function updatePreview(){
     const room=Math.max(0,c.cap-cardMonthCashback(c.id,ym));
     if(raw>room){cb=room;note=' · 超過上限封頂';}
   }
-  prevRate.textContent=r+'% 回饋'+note;
+  prevRate.textContent=r+'% 回饋'+(useBonus?'(達標)':'')+note;
   prevCb.textContent=fmt(cb);
 }
 function addRecord(){
@@ -1020,15 +1048,17 @@ function addRecord(){
   }else{
     const c=cardById(cid);
     if(!c){toast('請先新增一張卡片,或選擇「現金」');return;}
-    const r=rateOf(c,cat);
-    rec={id:uid(),date,cardId:cid,cat,amount:amt,rate:r,cashback:Math.round(amt*r/100),note};
+    const useBonus=bonusRateOf(c,cat)!=null && document.getElementById('rBonus').checked;
+    const r=effRate(c,cat,useBonus);
+    rec={id:uid(),date,cardId:cid,cat,amount:amt,rate:r,cashback:Math.round(amt*r/100),note,bonus:useBonus};
   }
   records.push(rec);
   document.getElementById('rAmount').value='';document.getElementById('rNote').value='';
+  document.getElementById('rBonus').checked=false;
   renderAll();
   schedulePush();
   toast(isCash(cid)?`已記錄現金支出 $${fmt(amt)}`
-    :(rec.capped?`已新增 · 回饋 +$${fmt(rec.cashback)}(已達上限)`:`已新增 · 回饋 +$${fmt(rec.cashback)}`));
+    :(rec.capped?`已新增 · 回饋 +$${fmt(rec.cashback)}(已達上限)`:`已新增 · 回饋 +$${fmt(rec.cashback)}${rec.bonus?'(達標)':''}`));
 }
 
 /* ============================================================
@@ -1043,8 +1073,11 @@ function buildModalStatics(){
     modalTheme=s.dataset.theme;
     document.querySelectorAll('.sw').forEach(x=>x.classList.toggle('on',x.dataset.theme===modalTheme));
   });
-  document.getElementById('catRates').innerHTML=CATEGORIES.map(([c,ic])=>
-    `<div class="cat-rate"><span class="nm">${ic} ${c}</span><input type="number" step="0.1" min="0" data-cat="${c}" placeholder="—"><span class="pc">%</span></div>`).join('');
+  document.getElementById('catRates').innerHTML=
+    CATEGORIES.map(([c,ic])=>
+    `<div class="cat-rate"><span class="nm">${ic} ${c}</span>`+
+    `<input class="r-base" type="number" step="0.1" min="0" data-cat="${c}" placeholder="一般">`+
+    `<input class="r-bonus" type="number" step="0.1" min="0" data-cat="${c}" placeholder="達標"></div>`).join('');
 }
 function openCardModal(id){
   editingCardId=id;
@@ -1053,10 +1086,14 @@ function openCardModal(id){
   document.getElementById('cName').value=c?c.name:'';
   document.getElementById('cRate').value=c?c.defaultRate:'';
   document.getElementById('cCap').value=c&&c.cap?c.cap:'';
+  document.getElementById('cNote').value=c&&c.note?c.note:'';
   modalTheme=c?c.theme:'jade';
   document.querySelectorAll('.sw').forEach(x=>x.classList.toggle('on',x.dataset.theme===modalTheme));
-  document.querySelectorAll('#catRates input').forEach(inp=>{
+  document.querySelectorAll('#catRates .r-base').forEach(inp=>{
     inp.value=(c&&c.rates&&c.rates[inp.dataset.cat]!=null)?c.rates[inp.dataset.cat]:'';
+  });
+  document.querySelectorAll('#catRates .r-bonus').forEach(inp=>{
+    inp.value=(c&&c.bonusRates&&c.bonusRates[inp.dataset.cat]!=null)?c.bonusRates[inp.dataset.cat]:'';
   });
   document.getElementById('delCardBtn').style.display=c?'inline-flex':'none';
   document.getElementById('cardModal').classList.add('on');
@@ -1067,15 +1104,15 @@ function saveCard(){
   if(!name){toast('請輸入卡片名稱');return;}
   const defaultRate=+document.getElementById('cRate').value||0;
   const cap=+document.getElementById('cCap').value||0;
-  const rates={};
-  document.querySelectorAll('#catRates input').forEach(inp=>{
-    if(inp.value!=='') rates[inp.dataset.cat]=+inp.value;
-  });
+  const note=document.getElementById('cNote').value.trim();
+  const rates={}, bonusRates={};
+  document.querySelectorAll('#catRates .r-base').forEach(inp=>{ if(inp.value!=='') rates[inp.dataset.cat]=+inp.value; });
+  document.querySelectorAll('#catRates .r-bonus').forEach(inp=>{ if(inp.value!=='') bonusRates[inp.dataset.cat]=+inp.value; });
   if(editingCardId){
     const c=cardById(editingCardId);
-    Object.assign(c,{name,defaultRate,cap,theme:modalTheme,rates});
+    Object.assign(c,{name,defaultRate,cap,theme:modalTheme,rates,bonusRates,note});
   }else{
-    cards.push({id:uid(),name,defaultRate,cap,theme:modalTheme,rates});
+    cards.push({id:uid(),name,defaultRate,cap,theme:modalTheme,rates,bonusRates,note});
   }
   saveCards();closeCardModal();renderAll();schedulePush();toast('卡片已儲存');
 }
@@ -1390,6 +1427,7 @@ function bind(){
   });
   document.getElementById('monthSel').onchange=e=>{currentMonth=e.target.value;renderAll();};
   ['rCard','rCat','rAmount','rDate'].forEach(id=>document.getElementById(id).addEventListener('input',updatePreview));
+  document.getElementById('rBonus').addEventListener('change',updatePreview);
   document.getElementById('addRecBtn').onclick=addRecord;
   document.getElementById('filterCard').onchange=renderRecords;
   document.getElementById('filterCat').onchange=renderRecords;
