@@ -137,6 +137,19 @@
   .split-seg.card{background:var(--jade)}
   .split-seg.cash{background:#6f8f7d}
 
+  /* 達標 cap tracking */
+  .bcap-row{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line-soft)}
+  .bcap-row:last-child{border-bottom:none}
+  .bcap-main{flex:1;min-width:0}
+  .bcap-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  .bcap-nm{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bcap-num{font-family:var(--num);font-size:13px;font-weight:600;color:var(--ink-soft);flex-shrink:0}
+  .bcap-track{height:7px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin:6px 0 4px}
+  .bcap-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#d8b25e,var(--gold));transition:width .4s}
+  .bcap-fill.full{background:linear-gradient(90deg,#e59b6f,var(--rose))}
+  .bcap-foot{font-size:11px;color:var(--ink-soft)}
+  .bcap-full{color:var(--rose);font-weight:700}
+
   /* ranking / recommender */
   .cat-chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .cat-chips::-webkit-scrollbar{display:none}
@@ -288,6 +301,8 @@
   .cap-track{height:5px;border-radius:99px;background:rgba(0,0,0,.28);overflow:hidden}
   .cap-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#ffe39c,#ffd166);transition:width .4s}
   .cap-fill.full{background:linear-gradient(90deg,#ffcaa8,#ff9b6b)}
+  .cap-fill.bonus{background:linear-gradient(90deg,#b8e0cf,#6fd0a8)}
+  .cap-fill.bonus.full{background:linear-gradient(90deg,#ffcaa8,#ff9b6b)}
 
   /* capped badge in record list */
   .cap-tag{display:inline-block;font-size:9.5px;font-weight:700;color:var(--rose);background:rgba(192,96,74,.12);padding:1px 6px;border-radius:6px;margin-left:5px}
@@ -447,6 +462,12 @@
         <div class="split-bar" id="splitBar"><div class="split-seg card" id="splitBarCard"></div><div class="split-seg cash" id="splitBarCash"></div></div>
       </div>
 
+      <!-- bonus (達標) cashback vs cap -->
+      <div class="panel">
+        <div class="panel-h"><h2>達標回饋上限追蹤</h2><span class="hint" id="bonusTotal"></span></div>
+        <div id="bonusCapList"></div>
+      </div>
+
       <!-- ranking -->
       <div class="panel">
         <div class="panel-h">
@@ -541,7 +562,8 @@
       <div class="form-grid">
         <div class="field full"><label>卡片名稱</label><input type="text" id="cName" placeholder="例:玉山 Pi 拍錢包卡"></div>
         <div class="field"><label>預設回饋 (%)</label><input type="number" id="cRate" class="num" placeholder="1" step="0.1" min="0"></div>
-        <div class="field"><label>每月回饋上限 (NT$,選填)</label><input type="number" id="cCap" class="num" placeholder="無上限" min="0"></div>
+        <div class="field"><label>每月回饋總上限 (NT$,選填)</label><input type="number" id="cCap" class="num" placeholder="無上限" min="0"></div>
+        <div class="field"><label>達標回饋上限 (NT$/月,選填)</label><input type="number" id="cBonusCap" class="num" placeholder="無上限" min="0"></div>
         <div class="field full"><label>卡片顏色</label><div class="swatches" id="swatches"></div></div>
         <div class="field full"><label>備註(選填,如達標條件、登錄提醒)</label><textarea id="cNote" rows="2" placeholder="例:LINE Pay 需每月登錄;達標=當月一般消費滿 NT$3,000"></textarea></div>
         <div class="field full">
@@ -750,21 +772,26 @@ function syncCashbacks(){
   Object.values(groups).forEach(recs=>{
     const card=cardById(recs[0].cardId);
     const cap=(card&&card.cap)?+card.cap:0;
+    const bonusCap=(card&&card.bonusCap)?+card.bonusCap:0;
     recs.sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
-    let acc=0;
+    let acc=0, accBonus=0;
     recs.forEach(r=>{
       const rate=card?effRate(card,r.cat,r.bonus):(+r.rate||0);
       r.rate=rate;
       const raw=Math.round(r.amount*rate/100);
       r.uncapped=raw;
+      let cb=raw, capped=false;
+      if(card && r.bonus && bonusCap>0){
+        const broom=Math.max(0,bonusCap-accBonus);
+        if(cb>broom){cb=broom;capped=true;}
+      }
       if(cap>0){
         const room=Math.max(0,cap-acc);
-        r.cashback=Math.min(raw,room);
-        r.capped=raw>room;
-        acc+=r.cashback;
-      }else{
-        r.cashback=raw; r.capped=false;
+        if(cb>room){cb=room;capped=true;}
       }
+      r.cashback=cb; r.capped=capped;
+      acc+=cb;
+      if(r.bonus) accBonus+=cb;
     });
   });
 }
@@ -772,6 +799,11 @@ function syncCashbacks(){
 /* 指定卡片在某個月份已累積的回饋(用於上限進度條) */
 function cardMonthCashback(cardId,ym){
   return records.filter(r=>r.cardId===cardId&&monthOf(r.date)===ym)
+    .reduce((s,r)=>s+r.cashback,0);
+}
+/* 指定卡片某月的「達標」回饋(用於達標上限進度條) */
+function cardMonthBonusCashback(cardId,ym){
+  return records.filter(r=>r.cardId===cardId&&r.bonus&&monthOf(r.date)===ym)
     .reduce((s,r)=>s+r.cashback,0);
 }
 
@@ -785,6 +817,7 @@ function renderAll(){
   renderHero(st);
   renderKPIs(st);
   renderSplit(st);
+  renderBonusCap(recs);
   renderRanking();
   renderCharts(st);
   renderRecords();
@@ -819,6 +852,33 @@ function renderKPIs(st){
   document.getElementById('kCashback').textContent=fmt(st.cb);
   document.getElementById('kSpend').textContent=fmt(st.spend);
   document.getElementById('kRate').textContent=st.rate.toFixed(2);
+}
+
+function renderBonusCap(recs){
+  const list=document.getElementById('bonusCapList');
+  const byCard={}; let total=0;
+  recs.forEach(r=>{ if(r.bonus && !isCash(r.cardId)){ byCard[r.cardId]=(byCard[r.cardId]||0)+r.cashback; total+=r.cashback; } });
+  document.getElementById('bonusTotal').textContent='本期達標回饋 $'+fmt(total);
+  const capCards=cards.filter(c=>c.cap>0);
+  if(!capCards.length){
+    list.innerHTML='<div class="empty" style="padding:18px 12px"><span class="em">🎯</span>還沒有設定回饋上限的卡片。到「我的卡片」為卡片填「每月回饋上限」,即可在此追蹤達標回饋累積。</div>';
+    return;
+  }
+  list.innerHTML=capCards.map(c=>{
+    const used=byCard[c.id]||0;
+    const pct=Math.min(100,used/c.cap*100);
+    const full=used>=c.cap;
+    const remain=Math.max(0,c.cap-used);
+    const [g1,g2]=THEMES[c.theme]||THEMES.jade;
+    return `<div class="bcap-row">
+      <span class="cardchip" style="background:linear-gradient(135deg,${g1},${g2})"></span>
+      <div class="bcap-main">
+        <div class="bcap-top"><span class="bcap-nm">${esc(c.name)}</span><span class="bcap-num">$${fmt(used)} / $${fmt(c.cap)}</span></div>
+        <div class="bcap-track"><div class="bcap-fill ${full?'full':''}" style="width:${pct}%"></div></div>
+        <div class="bcap-foot">${full?'<span class="bcap-full">⚠ 已達回饋上限</span>':`還可拿 $${fmt(remain)} 達標回饋`}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderSplit(st){
@@ -942,6 +1002,15 @@ function renderCards(){
       capHtml=`<div class="cap-wrap">
         <div class="cap-head"><span>${+mm}月回饋上限${full?' · 已封頂':''}</span><span><span class="num">$${fmt(used)}</span> / $${fmt(c.cap)}</span></div>
         <div class="cap-track"><div class="cap-fill ${full?'full':''}" style="width:${pct}%"></div></div>
+      </div>`;
+    }
+    if(c.bonusCap){
+      const bused=cardMonthBonusCashback(c.id,capMonth);
+      const bpct=Math.min(100,bused/c.bonusCap*100);
+      const bfull=bused>=c.bonusCap;
+      capHtml+=`<div class="cap-wrap">
+        <div class="cap-head"><span>${+mm}月達標回饋上限${bfull?' · 已封頂':''}</span><span><span class="num">$${fmt(bused)}</span> / $${fmt(c.bonusCap)}</span></div>
+        <div class="cap-track"><div class="cap-fill bonus ${bfull?'full':''}" style="width:${bpct}%"></div></div>
       </div>`;
     }
     return `<div class="credit" data-id="${c.id}" style="background:linear-gradient(135deg,${g1},${g2})">
@@ -1086,6 +1155,7 @@ function openCardModal(id){
   document.getElementById('cName').value=c?c.name:'';
   document.getElementById('cRate').value=c?c.defaultRate:'';
   document.getElementById('cCap').value=c&&c.cap?c.cap:'';
+  document.getElementById('cBonusCap').value=c&&c.bonusCap?c.bonusCap:'';
   document.getElementById('cNote').value=c&&c.note?c.note:'';
   modalTheme=c?c.theme:'jade';
   document.querySelectorAll('.sw').forEach(x=>x.classList.toggle('on',x.dataset.theme===modalTheme));
@@ -1104,15 +1174,16 @@ function saveCard(){
   if(!name){toast('請輸入卡片名稱');return;}
   const defaultRate=+document.getElementById('cRate').value||0;
   const cap=+document.getElementById('cCap').value||0;
+  const bonusCap=+document.getElementById('cBonusCap').value||0;
   const note=document.getElementById('cNote').value.trim();
   const rates={}, bonusRates={};
   document.querySelectorAll('#catRates .r-base').forEach(inp=>{ if(inp.value!=='') rates[inp.dataset.cat]=+inp.value; });
   document.querySelectorAll('#catRates .r-bonus').forEach(inp=>{ if(inp.value!=='') bonusRates[inp.dataset.cat]=+inp.value; });
   if(editingCardId){
     const c=cardById(editingCardId);
-    Object.assign(c,{name,defaultRate,cap,theme:modalTheme,rates,bonusRates,note});
+    Object.assign(c,{name,defaultRate,cap,bonusCap,theme:modalTheme,rates,bonusRates,note});
   }else{
-    cards.push({id:uid(),name,defaultRate,cap,theme:modalTheme,rates,bonusRates,note});
+    cards.push({id:uid(),name,defaultRate,cap,bonusCap,theme:modalTheme,rates,bonusRates,note});
   }
   saveCards();closeCardModal();renderAll();schedulePush();toast('卡片已儲存');
 }
