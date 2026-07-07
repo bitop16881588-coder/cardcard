@@ -276,6 +276,13 @@
   .cat-rate.head{background:none;border:none;padding:0 10px;gap:6px}
   .cat-rate.head .pch{width:52px;flex-shrink:0;text-align:center;font-size:10.5px;color:var(--ink-soft);font-weight:600}
   .cat-rate .pc{font-size:12px;color:var(--ink-soft)}
+  .mini-link{font-size:11px;font-weight:700;color:var(--jade);background:var(--jade-soft);padding:2px 8px;border-radius:6px;margin-left:6px;border:none;cursor:pointer}
+  .mini-link:hover{background:#d3e8df}
+  .cat-row{display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid var(--line-soft)}
+  .cat-row .ci{font-size:19px;width:28px;text-align:center;flex-shrink:0}
+  .cat-row .cn{flex:1;font-weight:600;font-size:14.5px}
+  .cat-row .cx{width:30px;height:30px;border-radius:8px;color:var(--ink-faint);font-size:15px;flex-shrink:0;border:none;background:none;cursor:pointer}
+  .cat-row .cx:hover{background:rgba(192,96,74,.1);color:var(--rose)}
   #cNote{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;resize:vertical;width:100%}
   #cNote:focus{border-color:var(--jade);background:var(--surface);box-shadow:0 0 0 3px rgba(31,122,92,.12)}
   .credit .c-note{position:relative;z-index:1;font-size:11px;opacity:.9;margin-top:8px;line-height:1.5;white-space:pre-wrap;background:rgba(0,0,0,.15);padding:6px 9px;border-radius:8px}
@@ -504,7 +511,7 @@
           <div class="field"><label>日期</label><input type="date" id="rDate"></div>
           <div class="field"><label>金額 (NT$)</label><input type="number" id="rAmount" class="num" placeholder="0" inputmode="numeric" min="0"></div>
           <div class="field"><label>使用卡片</label><select id="rCard"></select></div>
-          <div class="field"><label>消費類別</label><select id="rCat"></select></div>
+          <div class="field"><label>消費類別 <button class="mini-link" id="manageCatsBtn" type="button">＋ 管理通路</button></label><select id="rCat"></select></div>
           <div class="field full"><label>備註(選填)</label><input type="text" id="rNote" placeholder="例:午餐、Uber、訂閱…"></div>
           <div class="field full" id="bonusToggleWrap" style="display:none">
             <label class="bonus-toggle"><input type="checkbox" id="rBonus"> <span>已達標加碼</span> <span class="bonus-hint" id="bonusHint"></span></label>
@@ -576,6 +583,25 @@
         <button class="btn btn-danger" id="delCardBtn" style="display:none">刪除</button>
         <button class="btn btn-primary btn-block" id="saveCardBtn">儲存卡片</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- CATEGORY MODAL -->
+<div class="overlay" id="catModal">
+  <div class="sheet">
+    <div class="sheet-h">
+      <h3>管理回饋通路</h3>
+      <button class="icon-btn" id="catClose" style="border:none;background:var(--surface-2)">✕</button>
+    </div>
+    <div class="sheet-b">
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:16px">
+        <div class="field" style="width:66px"><label>圖示</label><input type="text" id="newCatIcon" maxlength="6" placeholder="🏷️" style="text-align:center"></div>
+        <div class="field" style="flex:1"><label>通路名稱</label><input type="text" id="newCatName" maxlength="14" placeholder="例:Google Pay、家樂福"></div>
+        <button class="btn btn-primary" id="addCatBtn" style="height:44px">新增</button>
+      </div>
+      <div id="catList"></div>
+      <p style="font-size:11.5px;color:var(--ink-faint);margin-top:12px;line-height:1.6">新增的通路會出現在記帳類別、卡片回饋設定、速查表與排行。刪除通路不會刪掉已有的消費記錄。</p>
     </div>
   </div>
 </div>
@@ -656,12 +682,13 @@ const THEMES={
 };
 const THEME_KEYS=Object.keys(THEMES);
 
-const CATEGORIES=[
+const DEFAULT_CATEGORIES=[
   ['LINE Pay','💚'],['Apple Pay','🍎'],['街口支付','🟠'],
   ['蝦皮','🦐'],['淘寶','🛒'],['momo','🛍️'],
   ['日本','🇯🇵'],['韓國','🇰🇷'],['泰國','🇹🇭'],
 ];
-const CAT_ICON=Object.fromEntries(CATEGORIES);
+let categories=DEFAULT_CATEGORIES.map(x=>x.slice());
+const catIcon=name=>{const f=categories.find(c=>c[0]===name);return f?f[1]:'🏷️';};
 
 /* ---------- state ---------- */
 let cards=[], records=[];
@@ -677,9 +704,11 @@ const uk=s=>'ccr_u_'+currentUser.id+'_'+s;            // 使用者專屬的儲�
 function load(){
   try{cards=JSON.parse(localStorage.getItem(uk('cards')))||[]}catch(e){cards=[]}
   try{records=JSON.parse(localStorage.getItem(uk('records')))||[]}catch(e){records=[]}
+  try{const ct=JSON.parse(localStorage.getItem(uk('cats')));categories=(ct&&ct.length)?ct:DEFAULT_CATEGORIES.map(x=>x.slice());}catch(e){categories=DEFAULT_CATEGORIES.map(x=>x.slice());}
 }
 function saveCards(){if(currentUser)localStorage.setItem(uk('cards'),JSON.stringify(cards))}
 function saveRecs(){if(currentUser)localStorage.setItem(uk('records'),JSON.stringify(records))}
+function saveCats(){if(currentUser)localStorage.setItem(uk('cats'),JSON.stringify(categories))}
 
 /* ---------- users / auth ---------- */
 function getUsers(){try{return JSON.parse(localStorage.getItem(USERS_KEY))||[]}catch(e){return []}}
@@ -909,7 +938,7 @@ function renderSplit(st){
 
 function renderRanking(){
   const chips=document.getElementById('rankChips');
-  chips.innerHTML=CATEGORIES.map(([c,ic])=>
+  chips.innerHTML=categories.map(([c,ic])=>
     `<button class="chip ${c===rankCat?'on':''}" data-cat="${c}">${ic} ${c}</button>`).join('');
   chips.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{rankCat=b.dataset.cat;renderRanking();});
 
@@ -960,7 +989,7 @@ function renderCharts(st){
   else{
     bc.style.display='block';be.innerHTML='';
     chartCat=new Chart(bc,{type:'bar',data:{
-      labels:catEntries.map(([c])=>(CAT_ICON[c]||'')+' '+c),
+      labels:catEntries.map(([c])=>catIcon(c)+' '+c),
       datasets:[{data:catEntries.map(([,v])=>v.cb),backgroundColor:'#1f7a5c',borderRadius:6,maxBarThickness:26}]
     },options:{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` 回饋 NT$${fmt(c.parsed.x)}`}}},
       scales:{x:{ticks:{font:{family:"'Space Grotesk'"},callback:v=>'$'+fmt(v)},grid:{color:'rgba(0,0,0,.05)'}},
@@ -984,7 +1013,7 @@ function renderRecords(){
         ? `<span class="strike">+$${fmt(r.uncapped)}</span>+$${fmt(r.cashback)} · ${r.rate}%<span class="cap-tag">已封頂</span>`
         : `+$${fmt(r.cashback)} · ${r.rate}%${r.bonus?'<span class="bonus-tag">達標</span>':''}`);
     return `<div class="rec">
-      <div class="rec-ico">${isCash(r.cardId)?'💵':(CAT_ICON[r.cat]||'💳')}</div>
+      <div class="rec-ico">${isCash(r.cardId)?'💵':(catIcon(r.cat))}</div>
       <div class="rec-mid">
         <div class="t">${esc(r.note||r.cat)}</div>
         <div class="s"><span class="dot" style="background:${g}"></span>${esc(nameOf(r.cardId))} · ${r.cat} · ${r.date.slice(5)}</div>
@@ -1036,7 +1065,7 @@ function renderCards(){
       </div>
       <div class="c-name">${esc(c.name)}</div>
       <div class="c-meta">
-        ${bonus.length?bonus.map(([k,v])=>{const b=bonusRateOf(c,k);return `<span class="c-badge">${CAT_ICON[k]||''}${k} ${v}%${b!=null?`→${b}%`:''}</span>`;}).join(''):'<span style="opacity:.7">點擊設定通路回饋</span>'}
+        ${bonus.length?bonus.map(([k,v])=>{const b=bonusRateOf(c,k);return `<span class="c-badge">${catIcon(k)}${k} ${v}%${b!=null?`→${b}%`:''}</span>`;}).join(''):'<span style="opacity:.7">點擊設定通路回饋</span>'}
       </div>
       ${c.note?`<div class="c-note">${esc(c.note)}</div>`:''}
       ${capHtml}
@@ -1057,7 +1086,7 @@ function renderQuickTable(){
     h+=`<th><span class="qt-chip" style="background:linear-gradient(135deg,${g1},${g2})"></span><span class="qt-cardname">${esc(c.name)}</span>${cap}</th>`;
   });
   h+='</tr></thead><tbody>';
-  CATEGORIES.forEach(([cat,ic])=>{
+  categories.forEach(([cat,ic])=>{
     const rates=cards.map(c=>rateOf(c,cat));
     const max=Math.max(...rates);
     h+=`<tr><td class="cat-col">${ic} ${cat}</td>`;
@@ -1081,9 +1110,9 @@ function refreshSelects(){
   const prev=rCard.value;
   rCard.innerHTML=opts+cashOpt;
   if(prev===CASH_ID||cards.find(c=>c.id===prev))rCard.value=prev;
-  document.getElementById('rCat').innerHTML=CATEGORIES.map(([c,ic])=>`<option value="${c}">${ic} ${c}</option>`).join('');
+  document.getElementById('rCat').innerHTML=categories.map(([c,ic])=>`<option value="${c}">${ic} ${c}</option>`).join('');
   document.getElementById('filterCard').innerHTML='<option value="">全部卡片</option>'+opts+cashOpt;
-  document.getElementById('filterCat').innerHTML='<option value="">全部類別</option>'+CATEGORIES.map(([c,ic])=>`<option value="${c}">${ic} ${c}</option>`).join('');
+  document.getElementById('filterCat').innerHTML='<option value="">全部類別</option>'+categories.map(([c,ic])=>`<option value="${c}">${ic} ${c}</option>`).join('');
   updatePreview();
 }
 
@@ -1149,6 +1178,34 @@ function addRecord(){
 /* ============================================================
    CARD MODAL
    ============================================================ */
+function openCatModal(){renderCatList();document.getElementById('catModal').classList.add('on');}
+function closeCatModal(){document.getElementById('catModal').classList.remove('on');}
+function renderCatList(){
+  const el=document.getElementById('catList');
+  el.innerHTML=categories.map((c,i)=>`<div class="cat-row"><span class="ci">${c[1]||'🏷️'}</span><span class="cn">${esc(c[0])}</span><button class="cx" data-i="${i}">✕</button></div>`).join('');
+  el.querySelectorAll('.cx').forEach(b=>b.onclick=()=>deleteCat(+b.dataset.i));
+}
+function addCat(){
+  const name=document.getElementById('newCatName').value.trim();
+  const icon=document.getElementById('newCatIcon').value.trim()||'🏷️';
+  if(!name){toast('請輸入通路名稱');return;}
+  if(categories.some(c=>c[0]===name)){toast('這個通路已存在');return;}
+  categories.push([name,icon]);
+  saveCats();
+  document.getElementById('newCatName').value='';document.getElementById('newCatIcon').value='';
+  renderCatList();refreshSelects();renderAll();schedulePush();
+  toast('已新增通路');
+}
+function deleteCat(i){
+  const c=categories[i]; if(!c)return;
+  const used=records.some(r=>r.cat===c[0]);
+  if(!confirm('刪除通路「'+c[0]+'」?'+(used?'(已有消費記錄使用,記錄會保留)':'')))return;
+  categories.splice(i,1);
+  saveCats();
+  renderCatList();refreshSelects();renderAll();schedulePush();
+  toast('已刪除通路');
+}
+
 function buildModalStatics(){
   document.getElementById('swatches').innerHTML=THEME_KEYS.map(k=>{
     const [g1,g2]=THEMES[k];
@@ -1159,12 +1216,13 @@ function buildModalStatics(){
     document.querySelectorAll('.sw').forEach(x=>x.classList.toggle('on',x.dataset.theme===modalTheme));
   });
   document.getElementById('catRates').innerHTML=
-    CATEGORIES.map(([c,ic])=>
+    categories.map(([c,ic])=>
     `<div class="cat-rate"><span class="nm">${ic} ${c}</span>`+
     `<input class="r-base" type="number" step="0.1" min="0" data-cat="${c}" placeholder="一般">`+
     `<input class="r-bonus" type="number" step="0.1" min="0" data-cat="${c}" placeholder="達標"></div>`).join('');
 }
 function openCardModal(id){
+  buildModalStatics();
   editingCardId=id;
   const c=id?cardById(id):null;
   document.getElementById('modalTitle').textContent=c?'編輯卡片':'新增卡片';
@@ -1266,7 +1324,7 @@ function schedulePush(){
 async function pushCloud(){
   if(!CLOUD()||!currentUser||!currentUser.token)return;
   try{
-    const r=await api({action:'save',username:currentUser.name,token:currentUser.token,data:{cards,records}});
+    const r=await api({action:'save',username:currentUser.name,token:currentUser.token,data:{cards,records,cats:categories}});
     setSync(r&&r.ok?'ok':'error');
   }catch(e){setSync('offline');}
 }
@@ -1274,7 +1332,7 @@ async function refreshFromCloud(){
   setSync('saving');
   try{
     const r=await api({action:'load',username:currentUser.name,token:currentUser.token});
-    if(r&&r.ok){cards=r.data.cards||[];records=r.data.records||[];saveCards();saveRecs();renderAll();setSync('ok');}
+    if(r&&r.ok){cards=r.data.cards||[];records=r.data.records||[];if(r.data.cats&&r.data.cats.length)categories=r.data.cats;saveCards();saveRecs();saveCats();renderAll();setSync('ok');}
     else{setSync('error');toast('登入已逾期,請重新登入');localStorage.removeItem(CLOUD_SESSION);showAuth();}
   }catch(e){setSync('offline');}
 }
@@ -1303,8 +1361,9 @@ function enterCloud(name,token,data,isNew){
   localStorage.setItem(CLOUD_SESSION,JSON.stringify({name,token}));
   cards=(data&&data.cards)?data.cards:[];
   records=(data&&data.records)?data.records:[];
+  categories=(data&&data.cats&&data.cats.length)?data.cats:DEFAULT_CATEGORIES.map(x=>x.slice());
   if(isNew&&!cards.length&&!records.length){seed();}
-  else{saveCards();saveRecs();}
+  else{saveCards();saveRecs();saveCats();}
   document.getElementById('authScreen').classList.remove('on');
   document.getElementById('clPass').value='';
   currentMonth='ALL';rankCat='日本';
@@ -1554,6 +1613,11 @@ function bind(){
   document.getElementById('monthSel').onchange=e=>{currentMonth=e.target.value;renderAll();};
   ['rCard','rCat','rAmount','rDate'].forEach(id=>document.getElementById(id).addEventListener('input',updatePreview));
   document.getElementById('rBonus').addEventListener('change',updatePreview);
+  document.getElementById('manageCatsBtn').onclick=openCatModal;
+  document.getElementById('catClose').onclick=closeCatModal;
+  document.getElementById('catModal').onclick=e=>{if(e.target.id==='catModal')closeCatModal();};
+  document.getElementById('addCatBtn').onclick=addCat;
+  document.getElementById('newCatName').onkeydown=e=>{if(e.key==='Enter')addCat();};
   document.getElementById('addRecBtn').onclick=addRecord;
   document.getElementById('filterCard').onchange=renderRecords;
   document.getElementById('filterCat').onchange=renderRecords;
